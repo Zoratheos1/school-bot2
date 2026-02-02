@@ -1,6 +1,5 @@
 import streamlit as st
 import os
-import traceback # <--- NEW: Helps us see the full error
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
@@ -12,27 +11,37 @@ from langchain_core.output_parsers import StrOutputParser
 from deep_translator import GoogleTranslator
 from langdetect import detect
 
+# --- PAGE CONFIGURATION ---
+st.set_page_config(
+    page_title="School AI Assistant",
+    page_icon="🎓",
+    layout="centered"
+)
+
+# --- HIDE STREAMLIT STYLE ---
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
+
 # --- CONFIGURATION ---
-st.set_page_config(page_title="School AI", page_icon="🎓")
 PDF_FILE_NAME = "School_constitution.pdf"
 
-# 1. SIDEBAR
-with st.sidebar:
-    st.title("⚙️ Settings")
-    api_key = st.text_input("Enter Groq API Key:", type="password")
-    
-    if os.path.exists(PDF_FILE_NAME):
-        st.success(f"✅ {PDF_FILE_NAME} loaded!")
-    else:
-        st.error(f"❌ {PDF_FILE_NAME} not found!")
-
-# --- 2. THE BRAIN ---
+# --- THE BRAIN (Cached) ---
 @st.cache_resource
-def setup_brain(groq_key):
+def setup_brain():
     try:
+        # Get Key from Secrets (Hidden)
+        api_key = st.secrets["GROQ_API_KEY"]
+        
         # Load PDF
         if not os.path.exists(PDF_FILE_NAME):
-            raise FileNotFoundError(f"Could not find {PDF_FILE_NAME}")
+            st.error("Error: PDF file not found.")
+            return None
 
         loader = PyPDFLoader(PDF_FILE_NAME)
         data = loader.load()
@@ -48,7 +57,7 @@ def setup_brain(groq_key):
         llm = ChatGroq(
             temperature=0.1, 
             model_name="llama-3.3-70b-versatile", 
-            api_key=groq_key
+            api_key=api_key
         )
 
         template = """
@@ -56,6 +65,7 @@ def setup_brain(groq_key):
         Context: {context}
         Question: {question}
         Answer:"""
+        
         prompt = PromptTemplate.from_template(template)
         
         qa_chain = (
@@ -65,54 +75,54 @@ def setup_brain(groq_key):
             | StrOutputParser()
         )
         return qa_chain
-
     except Exception as e:
-        # --- PRINT THE REAL ERROR ---
-        st.error(f"CRITICAL ERROR: {e}")
-        st.code(traceback.format_exc()) # Prints the full computer report
+        st.error(f"System Error: {e}")
         return None
 
-# --- 3. CHAT ---
-st.title("🎓 School AI Assistant")
+# --- MAIN INTERFACE ---
+st.title("🎓 School Assistant")
+st.write("Ask any question about the school rules. I speak English and Uzbek!")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Display History
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if prompt := st.chat_input("Ask a question..."):
+# Handle Input
+if prompt := st.chat_input("Type your question here..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    if not api_key:
-        st.error("⚠️ Please enter your Groq API Key in the sidebar!")
-        st.stop()
-
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            chain = setup_brain(api_key)
+        with st.spinner("Searching school rules..."):
+            chain = setup_brain()
             
             if chain:
                 try:
+                    # Language Check
                     is_uzbek = False
                     try:
                         if detect(prompt) in ['uz', 'tr', 'az']:
                             is_uzbek = True
                     except: pass
 
+                    # Translate & Ask
                     query = prompt
                     if is_uzbek:
                         query = GoogleTranslator(source='auto', target='en').translate(prompt)
 
                     response = chain.invoke(query)
 
+                    # Translate Back
                     if is_uzbek:
                         response = GoogleTranslator(source='en', target='uz').translate(response)
 
                     st.markdown(response)
                     st.session_state.messages.append({"role": "assistant", "content": response})
+                
                 except Exception as e:
-                    st.error(f"Error during generation: {e}")
+                    st.error("I'm having trouble connecting right now. Please try again.")
