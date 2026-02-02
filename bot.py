@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import traceback # <--- NEW: Helps us see the full error
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
@@ -15,25 +16,24 @@ from langdetect import detect
 st.set_page_config(page_title="School AI", page_icon="🎓")
 PDF_FILE_NAME = "School_constitution.pdf"
 
-# 1. SIDEBAR (API Key & Settings)
+# 1. SIDEBAR
 with st.sidebar:
     st.title("⚙️ Settings")
-    st.write("This AI answers questions based on the School Constitution.")
-    
-    # Secret Key Input (Safer for websites)
     api_key = st.text_input("Enter Groq API Key:", type="password")
     
-    # Check if PDF exists
     if os.path.exists(PDF_FILE_NAME):
         st.success(f"✅ {PDF_FILE_NAME} loaded!")
     else:
-        st.error(f"❌ {PDF_FILE_NAME} not found. Please upload it to your folder.")
+        st.error(f"❌ {PDF_FILE_NAME} not found!")
 
-# --- 2. THE BRAIN (Cached for Speed) ---
+# --- 2. THE BRAIN ---
 @st.cache_resource
 def setup_brain(groq_key):
     try:
         # Load PDF
+        if not os.path.exists(PDF_FILE_NAME):
+            raise FileNotFoundError(f"Could not find {PDF_FILE_NAME}")
+
         loader = PyPDFLoader(PDF_FILE_NAME)
         data = loader.load()
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
@@ -51,7 +51,6 @@ def setup_brain(groq_key):
             api_key=groq_key
         )
 
-        # Chain
         template = """
         You are a helpful School Assistant.
         Context: {context}
@@ -66,67 +65,54 @@ def setup_brain(groq_key):
             | StrOutputParser()
         )
         return qa_chain
+
     except Exception as e:
+        # --- PRINT THE REAL ERROR ---
+        st.error(f"CRITICAL ERROR: {e}")
+        st.code(traceback.format_exc()) # Prints the full computer report
         return None
 
-# --- 3. THE CHAT INTERFACE ---
+# --- 3. CHAT ---
 st.title("🎓 School AI Assistant")
-st.caption("Ask me about the rules! (English & Uzbek supported)")
 
-# Initialize Chat History
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display Chat History
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Handle New User Input
 if prompt := st.chat_input("Ask a question..."):
-    # 1. Show User Message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 2. Check for API Key
     if not api_key:
-        st.error("Please enter your Groq API Key in the sidebar first!")
+        st.error("⚠️ Please enter your Groq API Key in the sidebar!")
         st.stop()
 
-    # 3. Generate Answer
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            try:
-                # Load Brain
-                chain = setup_brain(api_key)
-                if not chain:
-                    st.error("Error loading brain.")
-                    st.stop()
-
-                # Language Detection
-                is_uzbek = False
+            chain = setup_brain(api_key)
+            
+            if chain:
                 try:
-                    if detect(prompt) in ['uz', 'tr', 'az']:
-                        is_uzbek = True
-                except: pass
+                    is_uzbek = False
+                    try:
+                        if detect(prompt) in ['uz', 'tr', 'az']:
+                            is_uzbek = True
+                    except: pass
 
-                # Translate Query
-                query = prompt
-                if is_uzbek:
-                    query = GoogleTranslator(source='auto', target='en').translate(prompt)
+                    query = prompt
+                    if is_uzbek:
+                        query = GoogleTranslator(source='auto', target='en').translate(prompt)
 
-                # Get AI Response
-                response = chain.invoke(query)
+                    response = chain.invoke(query)
 
-                # Translate Response
-                if is_uzbek:
-                    response = GoogleTranslator(source='en', target='uz').translate(response)
+                    if is_uzbek:
+                        response = GoogleTranslator(source='en', target='uz').translate(response)
 
-                st.markdown(response)
-                
-                # Save to History
-                st.session_state.messages.append({"role": "assistant", "content": response})
-
-            except Exception as e:
-                st.error(f"Error: {e}")
+                    st.markdown(response)
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+                except Exception as e:
+                    st.error(f"Error during generation: {e}")
