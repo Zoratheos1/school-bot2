@@ -9,3 +9,4 @@ pypdf
 deep-translator
 langdetect
 sentence-transformers
+huggingface-hub
