@@ -46,10 +46,10 @@ if "recommendations" not in st.session_state:
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.title("🧠 School Genius")
-    st.markdown("I understand **English**, **Uzbek**, and **Mixed** languages!")
+    st.title("School Assistant")
+    st.markdown("Hello I am here to help!")
     
-    if st.button("🔄 Start New Chat", type="primary"):
+    if st.button(" Start New Chat", type="primary"):
         st.session_state.messages = []
         st.session_state.recommendations = ["Uniform rules", "Attendance policy", "Grading system"]
         st.rerun()
@@ -219,3 +219,4 @@ if user_input and llm:
                     
             except Exception as e:
                 st.error("I'm having trouble thinking right now. Please try again.")
+
