@@ -6,7 +6,5 @@ langchain-text-splitters
 langchain-core
 faiss-cpu
 pypdf
-deep-translator
-langdetect
 sentence-transformers
 huggingface-hub
