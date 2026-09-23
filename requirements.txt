@@ -1,10 +1,14 @@
-streamlit
-langchain-groq
-langchain-huggingface
-langchain-community
-langchain-text-splitters
-langchain-core
-faiss-cpu
-pypdf
-sentence-transformers
-huggingface-hub
+# requirements.txt
+# Python 3.11 or 3.12
+streamlit>=1.50,<2
+langchain>=1.0,<2
+langchain-classic>=1.0,<2
+langchain-core>=1.0,<2
+langchain-community>=0.4,<0.5
+langchain-groq>=1.0,<2
+langchain-huggingface>=1.0,<2
+langchain-text-splitters>=1.0,<2
+sentence-transformers>=5.1,<6
+faiss-cpu>=1.12,<2
+pdfplumber>=0.11.7,<0.12
+groq>=0.32,<1
